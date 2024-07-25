@@ -34,25 +34,68 @@ def run_pdfjam(input_file, output_file, nup_format, slides):
         '--outfile', output_file,
         '--nup', nup_format,
         '--a4paper',
-        '--pagenumber',
         '--', input_file,
         slides_str
     ]
     subprocess.run(command, check=True)
 
-# Function to add an empty page if necessary to maintain odd page number
 def ensure_odd_pages(pdf_file):
-    output_file = pdf_file.replace('.pdf', '_odd.pdf')
-    command = [
-        'pdfjam', pdf_file,
-        '--outfile', output_file,
-    #    '--suffix', '',
-        '--evenpages', 'no',
-        '--lastpage', '{empty}'
-    ]
-    subprocess.run(command, check=True)
-    os.remove(pdf_file)
-    os.rename(output_file, pdf_file)
+    # Check if file exists
+    if not os.path.isfile(pdf_file):
+        print(f"File '{pdf_file}' not found!")
+        return
+
+    # Get the number of pages in the PDF
+    try:
+        result = subprocess.run(['pdfinfo', pdf_file], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        output = result.stdout
+        for line in output.splitlines():
+            if "Pages:" in line:
+                page_count = int(line.split(":")[1].strip())
+                break
+        else:
+            print("Could not determine the number of pages in the PDF.")
+            return
+    except Exception as e:
+        print(f"Error occurred while retrieving page count: {e}")
+        return
+
+    print(f"The document has {page_count} pages.")
+
+    # Check if the page count is even
+    if page_count % 2 == 0:
+        print("The page count is even. Adding a blank page.")
+
+        # Create a blank page using LaTeX (empty document)
+        latex_code = r"""
+        \documentclass{article}
+        \usepackage{geometry}
+        \geometry{paperwidth=8.5in,paperheight=11in,margin=0in}
+        \pagestyle{empty}
+        \begin{document}
+        \end{document}
+        """
+        with open("blank.tex", "w") as f:
+            f.write(latex_code)
+
+        # Compile the LaTeX document to create a blank PDF
+        subprocess.run(['pdflatex', 'blank.tex'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        # Merge the blank page with the original document using pdftk and replace the original file
+        temp_pdf_path = f"{os.path.splitext(pdf_file)[0]}_temp.pdf"
+        subprocess.run(['pdftk', pdf_file, 'blank.pdf', 'cat', 'output', temp_pdf_path])
+
+        # Replace the original file with the updated file
+        os.replace(temp_pdf_path, pdf_file)
+
+        print(f"A blank page has been added. The file '{pdf_file}' has been updated.")
+
+        # Clean up temporary files
+        for temp_file in ["blank.tex", "blank.pdf", "blank.log", "blank.aux"]:
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+    else:
+        print("The page count is odd. No changes made.")
 
 # Function to process the YAML configuration and run pdfjam
 def process_pdf_files(config_file, output_file):
@@ -86,7 +129,7 @@ def process_pdf_files(config_file, output_file):
         intermediate_files.append(content_file)
         
         # Calculate number of pages in the content file
-        page_count = int(subprocess.check_output(['pdfinfo', content_file]).decode().split('Pages:')[1].strip())
+        page_count = int(subprocess.check_output(['pdfinfo', content_file]).decode().split('\nPages:')[1].split('\n')[0].strip())
         current_page += page_count
         
         # Ensure content ends on an odd page

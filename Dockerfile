@@ -5,6 +5,8 @@ FROM texlive/texlive:latest
 RUN apt-get update && \
     apt-get install -y python3 python3-pip
 
+RUN apt-get install -y poppler-utils
+
 # Install Python packages
 RUN pip3 install pyyaml --break-system-packages
 
