@@ -3,9 +3,7 @@ FROM texlive/texlive:latest
 
 # Update package lists and install necessary packages
 RUN apt-get update && \
-    apt-get install -y python3 python3-pip
-
-RUN apt-get install -y poppler-utils
+    apt-get install -y python3 python3-pip poppler-utils imagemagick
 
 # Install Python packages
 RUN pip3 install pyyaml --break-system-packages

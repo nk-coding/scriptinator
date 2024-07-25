@@ -1,6 +1,16 @@
 import subprocess
 import yaml
 import os
+import shutil
+
+def exec_latex(latex_code, output_file):
+    with open("temp.tex", "w") as f:
+        f.write(latex_code)
+    subprocess.run(["pdflatex", "temp.tex"], check=True)
+    shutil.move("temp.pdf", output_file)
+    os.remove("temp.tex")
+    os.remove("temp.log")
+    os.remove("temp.aux")
 
 # Function to create a title page with large text
 def create_title_page(title, output_file):
@@ -10,6 +20,7 @@ def create_title_page(title, output_file):
     \\usepackage{{geometry}}
     \\geometry{{a4paper, margin=1in}}
     \\begin{{document}}
+    \\thispagestyle{{empty}}
     \\centering
     \\vspace*{{\\fill}}
     \\Huge
@@ -18,13 +29,34 @@ def create_title_page(title, output_file):
     \\newpage
     \\end{{document}}
     """
-    with open("title.tex", "w") as f:
-        f.write(title_latex)
-    subprocess.run(["pdflatex", "title.tex"], check=True)
-    os.rename("title.pdf", output_file)
-    os.remove("title.tex")
-    os.remove("title.log")
-    os.remove("title.aux")
+    exec_latex(title_latex, output_file)
+
+# Function to generate LaTeX code for the ToC
+def generate_latex_toc(entries, output_file):
+    toc_entries_latex = ""
+    for entry in entries:
+        title = entry["title"]
+        page_number = entry["current_page"]
+        toc_entries_latex += f"\\item {title} \\dotfill {page_number}\n"
+    
+    latex_code = f"""
+    \\documentclass{{article}}
+    \\usepackage[utf8]{{inputenc}}
+    \\usepackage{{geometry}}
+    \\geometry{{left=1in, right=1in, top=1in, bottom=1in}}
+
+    \\begin{{document}}
+
+    \\title{{Table of Contents}}
+    \\maketitle
+
+    \\begin{{enumerate}}
+    {toc_entries_latex}
+    \\end{{enumerate}}
+
+    \\end{{document}}
+    """
+    exec_latex(latex_code, output_file)
 
 # Function to run pdfjam with given options
 def run_pdfjam(input_file, output_file, nup_format, slides):
@@ -39,51 +71,37 @@ def run_pdfjam(input_file, output_file, nup_format, slides):
     ]
     subprocess.run(command, check=True)
 
-def ensure_odd_pages(pdf_file):
+def get_page_count(pdf_file):
     # Check if file exists
     if not os.path.isfile(pdf_file):
         print(f"File '{pdf_file}' not found!")
         return
 
     # Get the number of pages in the PDF
-    try:
-        result = subprocess.run(['pdfinfo', pdf_file], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        output = result.stdout
-        for line in output.splitlines():
-            if "Pages:" in line:
-                page_count = int(line.split(":")[1].strip())
-                break
-        else:
-            print("Could not determine the number of pages in the PDF.")
-            return
-    except Exception as e:
-        print(f"Error occurred while retrieving page count: {e}")
-        return
+    result = subprocess.run(['pdfinfo', pdf_file], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    output = result.stdout
+    for line in output.splitlines():
+        if "Pages:" in line:
+            page_count = int(line.split(":")[1].strip())
+            return page_count
+    else:
+        print("Could not determine the number of pages in the PDF.")
+        raise Exception("Could not determine the number of pages in the PDF.")
 
-    print(f"The document has {page_count} pages.")
+def ensure_odd_pages(pdf_file):
+    # Get the number of pages in the PDF
+    page_count = get_page_count(pdf_file)
 
     # Check if the page count is even
     if page_count % 2 == 0:
         print("The page count is even. Adding a blank page.")
 
-        # Create a blank page using LaTeX (empty document)
-        latex_code = r"""
-        \documentclass{article}
-        \usepackage{geometry}
-        \geometry{paperwidth=8.5in,paperheight=11in,margin=0in}
-        \pagestyle{empty}
-        \begin{document}
-        \end{document}
-        """
-        with open("blank.tex", "w") as f:
-            f.write(latex_code)
-
         # Compile the LaTeX document to create a blank PDF
-        subprocess.run(['pdflatex', 'blank.tex'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        subprocess.run(['convert', 'xc:none', '-page', 'A4', 'blank.pdf'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         # Merge the blank page with the original document using pdftk and replace the original file
         temp_pdf_path = f"{os.path.splitext(pdf_file)[0]}_temp.pdf"
-        subprocess.run(['pdftk', pdf_file, 'blank.pdf', 'cat', 'output', temp_pdf_path])
+        subprocess.run(['pdfunite', pdf_file, "blank.pdf", temp_pdf_path])
 
         # Replace the original file with the updated file
         os.replace(temp_pdf_path, pdf_file)
@@ -97,13 +115,35 @@ def ensure_odd_pages(pdf_file):
     else:
         print("The page count is odd. No changes made.")
 
+def add_page_numbers(output_file, tmp_output_file):
+    latex_command = f"""
+    \\documentclass[twoside]{{article}}
+    \\usepackage[a4paper, margin=1in]{{geometry}} % Adjust the bottom margin
+    \\usepackage{{fancyhdr}}
+    \\usepackage{{pdfpages}}
+
+    \\fancyhf{{}} % Clear all header and footer fields
+    \\renewcommand{{\\headrulewidth}}{{0pt}} % Remove the header line
+
+    % Define the page numbers' positions
+    \\fancyfoot[LE]{{\\thepage}} % Left on Even pages
+    \\fancyfoot[RO]{{\\thepage}} % Right on Odd pages
+
+    \\begin{{document}}
+
+    \\includepdf[pages=1-,pagecommand={{\\thispagestyle{{fancy}}}}]{{{tmp_output_file}}}
+
+    \\end{{document}}
+    """
+    exec_latex(latex_command, output_file)
+
 # Function to process the YAML configuration and run pdfjam
 def process_pdf_files(config_file, output_file):
     with open(config_file, 'r') as f:
         config = yaml.safe_load(f)
 
     toc_entries = []
-    current_page = 1
+    current_page = 2
     intermediate_files = []
 
     # Process each file defined in the YAML config
@@ -119,8 +159,7 @@ def process_pdf_files(config_file, output_file):
         intermediate_files.append(title_page_file)
         
         # Ensure title page is on an odd page
-        ensure_odd_pages(title_page_file)
-        toc_entries.append(f"{title}: {current_page}")
+        toc_entries.append({"title": title, "current_page": current_page})
         current_page += 1  # Title page counts as one page
         
         # Generate content file with pdfjam
@@ -128,21 +167,27 @@ def process_pdf_files(config_file, output_file):
         run_pdfjam(input_file, content_file, nup_format, slides)
         intermediate_files.append(content_file)
         
-        # Calculate number of pages in the content file
-        page_count = int(subprocess.check_output(['pdfinfo', content_file]).decode().split('\nPages:')[1].split('\n')[0].strip())
-        current_page += page_count
-        
         # Ensure content ends on an odd page
         ensure_odd_pages(content_file)
 
+        # Calculate number of pages in the content file
+        page_count = get_page_count(content_file)
+        current_page += page_count
+
     # Create a table of contents page
     toc_file = 'toc.pdf'
-    create_title_page("Table of Contents\n\n" + "\n".join(toc_entries), toc_file)
+    generate_latex_toc(toc_entries, toc_file)
     intermediate_files.insert(0, toc_file)
 
+    tmp_output_file = "output_tmp.pdf"
+
     # Combine all intermediate files into the final output file
-    combine_command = ['pdfjam', '--outfile', output_file] + intermediate_files
+    combine_command = ['pdfjam', '--outfile', tmp_output_file] + intermediate_files
     subprocess.run(combine_command, check=True)
+
+    # Add page numbers to the output file
+    add_page_numbers(output_file, tmp_output_file)
+    intermediate_files.append(tmp_output_file)
     
     # Clean up intermediate files
     for file in intermediate_files:
