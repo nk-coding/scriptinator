@@ -149,7 +149,7 @@ def process_pdf_files(config_file, output_file):
     # Process each file defined in the YAML config
     for i, entry in enumerate(config['files']):
         title = entry['title']
-        input_file = os.path.join('input', entry['name'])
+        input_file = os.path.join('input', entry['file'])
         nup_format = entry['format']
         slides = entry['slides']
         
