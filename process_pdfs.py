@@ -88,12 +88,12 @@ def get_page_count(pdf_file):
         print("Could not determine the number of pages in the PDF.")
         raise Exception("Could not determine the number of pages in the PDF.")
 
-def ensure_odd_pages(pdf_file):
+def ensure_odd_pages(pdf_file, invert=False):
     # Get the number of pages in the PDF
     page_count = get_page_count(pdf_file)
 
     # Check if the page count is even
-    if page_count % 2 == 0:
+    if (page_count % 2 == 0) != invert:
         print("The page count is even. Adding a blank page.")
 
         # Compile the LaTeX document to create a blank PDF
@@ -143,7 +143,7 @@ def process_pdf_files(config_file, output_file):
         config = yaml.safe_load(f)
 
     toc_entries = []
-    current_page = 2
+    current_page = 3
     intermediate_files = []
 
     # Process each file defined in the YAML config
@@ -177,6 +177,7 @@ def process_pdf_files(config_file, output_file):
     # Create a table of contents page
     toc_file = 'toc.pdf'
     generate_latex_toc(toc_entries, toc_file)
+    ensure_odd_pages(toc_file, invert=True)
     intermediate_files.insert(0, toc_file)
 
     tmp_output_file = "output_tmp.pdf"
