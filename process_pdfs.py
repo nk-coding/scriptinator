@@ -89,29 +89,19 @@ def get_page_count(pdf_file):
         raise Exception("Could not determine the number of pages in the PDF.")
 
 def ensure_odd_pages(pdf_file, invert=False):
-    # Get the number of pages in the PDF
     page_count = get_page_count(pdf_file)
 
-    # Check if the page count is even
     if (page_count % 2 == 0) != invert:
-        print("The page count is even. Adding a blank page.")
-
-        # Compile the LaTeX document to create a blank PDF
         subprocess.run(['convert', 'xc:none', '-page', 'A4', 'blank.pdf'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-        # Merge the blank page with the original document using pdftk and replace the original file
         temp_pdf_path = f"{os.path.splitext(pdf_file)[0]}_temp.pdf"
         subprocess.run(['pdfunite', pdf_file, "blank.pdf", temp_pdf_path])
 
-        # Replace the original file with the updated file
         os.replace(temp_pdf_path, pdf_file)
 
         print(f"A blank page has been added. The file '{pdf_file}' has been updated.")
 
-        # Clean up temporary files
-        for temp_file in ["blank.tex", "blank.pdf", "blank.log", "blank.aux"]:
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
+        os.remove("blank.pdf")
     else:
         print("The page count is odd. No changes made.")
 
