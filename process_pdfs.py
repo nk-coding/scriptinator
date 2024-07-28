@@ -19,8 +19,8 @@ def create_title_page(title, output_file):
     \\usepackage[utf8]{{inputenc}}
     \\usepackage{{geometry}}
     \\geometry{{a4paper, margin=1in}}
+    \\pagestyle{{empty}}
     \\begin{{document}}
-    \\thispagestyle{{empty}}
     \\centering
     \\vspace*{{\\fill}}
     \\Huge
@@ -44,11 +44,13 @@ def generate_latex_toc(entries, output_file):
     \\usepackage[utf8]{{inputenc}}
     \\usepackage{{geometry}}
     \\geometry{{left=1in, right=1in, top=1in, bottom=1in}}
-
+    \\pagestyle{{empty}}
+    
     \\begin{{document}}
 
     \\title{{Table of Contents}}
     \\maketitle
+    \\thispagestyle{{empty}}
 
     \\begin{{enumerate}}
     {toc_entries_latex}
@@ -108,7 +110,7 @@ def ensure_odd_pages(pdf_file, invert=False):
 def add_page_numbers(output_file, tmp_output_file):
     latex_command = f"""
     \\documentclass[twoside]{{article}}
-    \\usepackage[a4paper, margin=1in]{{geometry}} % Adjust the bottom margin
+    \\usepackage[a4paper, left=0cm, right=1.5cm, top=0cm, bottom=2.5cm]{{geometry}} % Adjust the bottom margin
     \\usepackage{{fancyhdr}}
     \\usepackage{{pdfpages}}
 
